@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum TestCaseType {
+  normal
+  edge_case
+  adversarial
+  tool_safety
+  privacy
+  policy
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+}
+
+enum RunStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+enum Verdict {
+  pass
+  fail
+  needs_review
+}
+
+enum Severity {
+  low
+  medium
+  high
+  critical
+}
+
+enum FailureCategory {
+  policy_violation
+  unsafe_tool_call
+  hallucination
+  privacy_leak
+  missing_escalation
+  poor_reasoning
+  incomplete_answer
+  none
+}
+
+enum ModelProvider {
+  groq
+  gemini
+  openai
+  mock
+}
+
+enum LaunchReadiness {
+  not_ready
+  needs_review
+  ready
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  agents    Agent[]
+  createdAt DateTime @default(now())
+}
+
+model Agent {
+  id              String          @id @default(cuid())
+  ownerId         String?
+  ownerEmail      String          @default("demo@agentshield.dev")
+  name            String
+  description     String          @db.Text
+  systemPrompt    String          @db.Text
+  toolsText       String          @db.Text
+  policyText      String          @db.Text
+  sampleTasksText String?         @db.Text
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  owner           User?           @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  promptVersions  PromptVersion[]
+  testSuites      TestSuite[]
+  testRuns        TestRun[]
+
+  @@index([ownerEmail])
+}
+
+model PromptVersion {
+  id              String   @id @default(cuid())
+  agentId         String
+  versionNumber   Int
+  systemPrompt    String   @db.Text
+  toolsText       String   @db.Text
+  policyText      String   @db.Text
+  sampleTasksText String?  @db.Text
+  createdAt       DateTime @default(now())
+  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, versionNumber])
+}
+
+model TestSuite {
+  id        String     @id @default(cuid())
+  agentId   String
+  name      String
+  createdAt DateTime   @default(now())
+  agent     Agent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  testCases TestCase[]
+  testRuns  TestRun[]
+
+  @@index([agentId, createdAt])
+}
+
+model TestCase {
+  id               String       @id @default(cuid())
+  testSuiteId      String
+  type             TestCaseType
+  userInput        String       @db.Text
+  expectedBehavior String       @db.Text
+  riskLevel        RiskLevel
+  createdAt        DateTime     @default(now())
+  testSuite        TestSuite    @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  results          TestResult[]
+
+  @@index([testSuiteId, type])
+}
+
+model TestRun {
+  id               String      @id @default(cuid())
+  agentId          String
+  testSuiteId      String
+  status           RunStatus   @default(pending)
+  reliabilityScore Float?
+  totalTests       Int         @default(0)
+  passedTests      Int         @default(0)
+  failedTests      Int         @default(0)
+  startedAt        DateTime    @default(now())
+  completedAt      DateTime?
+  agent            Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  testSuite        TestSuite   @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  results          TestResult[]
+  failures         Failure[]
+  modelCalls       ModelCall[]
+  report           Report?
+
+  @@index([agentId, startedAt])
+  @@index([testSuiteId])
+}
+
+model TestResult {
+  id              String          @id @default(cuid())
+  testRunId       String
+  testCaseId      String
+  actualOutput    String          @db.Text
+  verdict         Verdict
+  severity        Severity
+  failureCategory FailureCategory @default(none)
+  explanation     String          @db.Text
+  createdAt       DateTime        @default(now())
+  testRun         TestRun         @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  testCase        TestCase        @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  failure         Failure?
+
+  @@index([testRunId, verdict])
+  @@index([failureCategory])
+}
+
+model Failure {
+  id           String          @id @default(cuid())
+  testRunId    String
+  testResultId String          @unique
+  category     FailureCategory
+  severity     Severity
+  details      String          @db.Text
+  createdAt    DateTime        @default(now())
+  testRun      TestRun         @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  testResult   TestResult      @relation(fields: [testResultId], references: [id], onDelete: Cascade)
+
+  @@index([testRunId, severity])
+  @@index([category])
+}
+
+model ModelCall {
+  id               String        @id @default(cuid())
+  testRunId        String?
+  provider         ModelProvider
+  model            String
+  purpose          String
+  inputTokens      Int           @default(0)
+  outputTokens     Int           @default(0)
+  latencyMs        Int           @default(0)
+  estimatedCostUsd Decimal       @default(0) @db.Decimal(10, 6)
+  success          Boolean       @default(true)
+  error            String?       @db.Text
+  createdAt        DateTime      @default(now())
+  testRun          TestRun?      @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+
+  @@index([testRunId, provider])
+  @@index([provider, createdAt])
+}
+
+model Report {
+  id              String          @id @default(cuid())
+  testRunId       String          @unique
+  summary         String          @db.Text
+  strengths       String[]
+  weaknesses      String[]
+  recommendations String[]
+  launchReadiness LaunchReadiness
+  createdAt       DateTime        @default(now())
+  testRun         TestRun         @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+}
