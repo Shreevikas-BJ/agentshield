@@ -10,7 +10,7 @@ export const envSchema = z.object({
     .enum(["true", "false"])
     .optional()
     .default("false"),
-  GROQ_MODEL: z.string().min(1).optional().default("moonshotai/kimi-k2-instruct-0905"),
+  GROQ_MODEL: z.string().min(1).optional().default("llama-3.1-8b-instant"),
   GEMINI_MODEL: z.string().min(1).optional().default("gemini-2.5-flash"),
   OPENAI_FINAL_JUDGE_MODEL: z.string().min(1).optional().default("gpt-5"),
 });

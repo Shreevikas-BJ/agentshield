@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DatabaseError } from "@/components/database-error";
 import { CategoryBadge, SeverityBadge, VerdictBadge } from "@/components/status-badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getRunDetail } from "@/lib/services/evaluation-service";
+import {
+  formatCallStatus,
+  formatCostEstimate,
+  summarizeModelCallDiagnostics,
+} from "@/lib/services/model-call-diagnostics";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +68,7 @@ export default async function RunDetailPage({
     }),
     { input: 0, output: 0, cost: 0 },
   );
+  const diagnostics = summarizeModelCallDiagnostics(run.modelCalls);
 
   return (
     <AppShell>
@@ -101,6 +108,17 @@ export default async function RunDetailPage({
           <RunStat icon={<Clock />} label="Model latency" value={`${totalLatency}ms`} />
           <RunStat icon={<Coins />} label="Estimated cost" value={`$${tokenUsage.cost.toFixed(4)}`} />
         </div>
+
+        {diagnostics.hasEvaluatorFallbackWarning ? (
+          <Alert className="mb-6 border-yellow-400/30 bg-yellow-950/20">
+            <TriangleAlert className="size-4" />
+            <AlertTitle>Evaluator fallback used</AlertTitle>
+            <AlertDescription>
+              Some evaluator calls used fallback due to model errors; reliability score may need review.
+              Failed Groq errors are listed in model-call diagnostics below.
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         {criticalFailures.length > 0 ? (
           <Card className="mb-6 border-red-400/30 bg-red-950/20">
@@ -160,6 +178,9 @@ export default async function RunDetailPage({
                         </TableCell>
                         <TableCell className="align-top">
                           <VerdictBadge verdict={result.verdict} />
+                          <div className="mt-2">
+                            <EvaluationSourceBadge explanation={result.explanation} />
+                          </div>
                           <p className="mt-2 max-w-64 text-xs text-muted-foreground">
                             {result.explanation}
                           </p>
@@ -195,20 +216,25 @@ export default async function RunDetailPage({
 
             <Card>
               <CardHeader>
-                <CardTitle>Model usage</CardTitle>
+                <CardTitle>Model call diagnostics</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <MiniUsage label="Input tokens" value={tokenUsage.input} />
                   <MiniUsage label="Output tokens" value={tokenUsage.output} />
+                  <MiniUsage label="Failed calls" value={diagnostics.failedCalls.length} />
+                  <MiniUsage
+                    label="Trace cost"
+                    value={formatCostEstimate(diagnostics.totalEstimatedCostUsd)}
+                  />
                 </div>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Provider</TableHead>
-                        <TableHead>Purpose</TableHead>
-                        <TableHead>Latency</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Usage</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -220,8 +246,27 @@ export default async function RunDetailPage({
                               {call.model}
                             </p>
                           </TableCell>
-                          <TableCell className="text-xs">{call.purpose}</TableCell>
-                          <TableCell className="font-mono text-xs">{call.latencyMs}ms</TableCell>
+                          <TableCell className="min-w-52 text-xs">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={call.success ? "default" : "destructive"}>
+                                {formatCallStatus(call.success)}
+                              </Badge>
+                              <span className="font-mono text-muted-foreground">
+                                {call.latencyMs}ms
+                              </span>
+                            </div>
+                            <p className="mt-2">{call.purpose}</p>
+                            {call.error ? (
+                              <p className="mt-2 max-w-72 whitespace-pre-wrap text-red-200">
+                                {call.error}
+                              </p>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="min-w-40 font-mono text-xs">
+                            <p>{call.inputTokens} in</p>
+                            <p>{call.outputTokens} out</p>
+                            <p>{formatCostEstimate(call.estimatedCostUsd)}</p>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -234,6 +279,20 @@ export default async function RunDetailPage({
       </section>
     </AppShell>
   );
+}
+
+function EvaluationSourceBadge({ explanation }: { explanation: string }) {
+  const normalized = explanation.toLowerCase();
+
+  if (normalized.includes("deterministic fallback used")) {
+    return <Badge variant="secondary">Fallback review</Badge>;
+  }
+
+  if (normalized.includes("could not be validated")) {
+    return <Badge variant="secondary">JSON repair review</Badge>;
+  }
+
+  return <Badge variant="outline">Groq review</Badge>;
 }
 
 function RunStat({

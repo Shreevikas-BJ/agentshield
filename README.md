@@ -49,12 +49,13 @@ Copy `.env.example` to `.env` or configure these in Vercel:
 DATABASE_URL=
 DIRECT_URL=
 GROQ_API_KEY=
+GROQ_MODEL=llama-3.1-8b-instant
 GEMINI_API_KEY=
 OPENAI_API_KEY=
 ENABLE_OPENAI_FINAL_JUDGE=false
 ```
 
-`DATABASE_URL` should usually be the Supabase pooled URL. `DIRECT_URL` should be the direct Supabase Postgres URL for migrations. Groq is the default model provider. Gemini and OpenAI are optional.
+`DATABASE_URL` should usually be the Supabase pooled URL. `DIRECT_URL` should be the direct Supabase Postgres URL for migrations. Groq is the default model provider. `GROQ_MODEL` defaults to `llama-3.1-8b-instant`; use `llama-3.3-70b-versatile` when you want a stronger evaluator and can tolerate higher latency/cost. Gemini and OpenAI are optional.
 
 ## Local Setup
 
@@ -92,12 +93,12 @@ npm run db:studio
 
 ## LLM Routing
 
-- **Groq**: default for test generation, target-agent simulation, and first-pass evaluation.
+- **Groq**: default for test generation, target-agent simulation, and first-pass evaluation. Calls use retry with exponential backoff, timeout handling, and a small sequential throttle between evaluator calls to reduce burst failures.
 - **Gemini**: optional policy/document/context review. If `GEMINI_API_KEY` is missing, AgentShield records a skipped mock review.
 - **OpenAI**: optional final judge for high-risk results. It only runs when `ENABLE_OPENAI_FINAL_JUDGE=true` and `OPENAI_API_KEY` exists.
 - **Mock mode**: if provider keys are missing, deterministic fallbacks keep the full UI and database workflow demoable.
 
-All LLM-facing outputs are expected as JSON and validated with Zod. Invalid JSON is repaired once. If repair fails, AgentShield records a safe `needs_review` outcome instead of crashing.
+All LLM-facing outputs are expected as JSON and validated with Zod. Invalid JSON is repaired once. If repair fails or Groq returns a transient provider error, AgentShield records the exact provider error in `ModelCall.error`, continues the run, and marks the evaluation `needs_review` unless the actual target output contains strong evidence of a policy/tool/privacy violation.
 
 ## Screenshots
 

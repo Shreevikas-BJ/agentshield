@@ -7,6 +7,7 @@ describe("environment handling", () => {
     const env = envSchema.parse({});
 
     expect(env.ENABLE_OPENAI_FINAL_JUDGE).toBe("false");
+    expect(env.GROQ_MODEL).toBe("llama-3.1-8b-instant");
     expect(isOpenAIFinalJudgeEnabled(env)).toBe(false);
   });
 

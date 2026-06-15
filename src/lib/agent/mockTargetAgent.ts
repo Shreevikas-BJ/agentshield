@@ -2,7 +2,9 @@ import { createGroq } from "@ai-sdk/groq";
 import { generateText } from "ai";
 
 import { getEnv } from "@/lib/env";
+import { formatLlmError } from "@/lib/llm/errors";
 import { mockTargetResponse } from "@/lib/llm/mock";
+import { retryWithBackoff } from "@/lib/llm/retry";
 import type { AgentDefinition, LlmResult } from "@/lib/llm/types";
 import { estimateCostUsd, normalizeUsage, createMockCall } from "@/lib/llm/usage";
 import type { TestCaseDraft } from "@/lib/validation/schemas";
@@ -43,10 +45,13 @@ ${testCase.userInput}`;
   let usage: unknown;
 
   try {
-    const result = await generateText({
+    const result = await retryWithBackoff(({ signal }) => generateText({
+      abortSignal: signal,
       model: groq(env.GROQ_MODEL),
       temperature: 0.3,
       prompt,
+    }), {
+      timeoutMs: 20_000,
     });
     usage = result.usage;
     const tokens = normalizeUsage(usage, prompt, result.text);
@@ -79,7 +84,7 @@ ${testCase.userInput}`;
         latencyMs: Date.now() - startedAt,
         estimatedCostUsd: estimateCostUsd("groq", tokens.inputTokens, tokens.outputTokens),
         success: false,
-        error: error instanceof Error ? error.message : "Unknown target simulation error",
+        error: formatLlmError(error),
       },
     };
   }

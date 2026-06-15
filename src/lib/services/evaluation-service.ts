@@ -6,9 +6,12 @@ import { calculateReliabilityScore, summarizeVerdicts } from "@/lib/evals/scorin
 import { generateTestCases, evaluateAgentResponse } from "@/lib/llm/groq";
 import { reviewPolicyContext } from "@/lib/llm/gemini";
 import { finalJudge } from "@/lib/llm/openai";
+import { delay } from "@/lib/llm/retry";
 import type { AgentDefinition } from "@/lib/llm/types";
 import { buildLaunchReadinessReport } from "@/lib/services/report-service";
 import { recordModelCall } from "@/lib/services/model-calls";
+
+const evaluatorThrottleMs = 200;
 
 export async function generateTestSuiteForAgent(agentId: string) {
   const prisma = getPrisma();
@@ -91,7 +94,7 @@ export async function runEvaluation(agentId: string, suiteId?: string) {
     const agentDefinition = toAgentDefinition(agent);
     const persistedResults = [];
 
-    for (const testCase of suite.testCases) {
+    for (const [index, testCase] of suite.testCases.entries()) {
       const targetResponse = await runMockTargetAgent({
         agent: agentDefinition,
         testCase,
@@ -102,6 +105,8 @@ export async function runEvaluation(agentId: string, suiteId?: string) {
         agent: agentDefinition,
         testCase,
         actualOutput: targetResponse.data,
+        targetSimulationFailed:
+          targetResponse.call.provider === "groq" && !targetResponse.call.success,
       });
       await recordModelCall(evaluation.call, run.id);
 
@@ -130,6 +135,10 @@ export async function runEvaluation(agentId: string, suiteId?: string) {
       }
 
       persistedResults.push(result);
+
+      if (process.env.GROQ_API_KEY && index < suite.testCases.length - 1) {
+        await delay(evaluatorThrottleMs);
+      }
     }
 
     const verdictSummary = summarizeVerdicts(persistedResults);
