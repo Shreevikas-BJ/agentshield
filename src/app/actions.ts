@@ -3,12 +3,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { createAgent } from "@/lib/services/agent-service";
+import { createAgent, createPromptVersion } from "@/lib/services/agent-service";
 import {
   generateTestSuiteForAgent,
   runEvaluation,
 } from "@/lib/services/evaluation-service";
-import { agentInputSchema } from "@/lib/validation/schemas";
+import { agentInputSchema, promptVersionInputSchema } from "@/lib/validation/schemas";
 
 export type AgentFormState = {
   error?: string;
@@ -26,6 +26,8 @@ export async function createAgentAction(
     toolsText: formData.get("toolsText"),
     policyText: formData.get("policyText"),
     sampleTasksText: formData.get("sampleTasksText"),
+    simulationMode: formData.get("simulationMode"),
+    scanLevel: formData.get("scanLevel"),
   });
 
   if (!parsed.success) {
@@ -37,6 +39,23 @@ export async function createAgentAction(
 
   const agent = await createAgent(parsed.data);
   redirect(`/agents/${agent.id}`);
+}
+
+export async function createPromptVersionAction(agentId: string, formData: FormData) {
+  const parsed = promptVersionInputSchema.safeParse({
+    systemPrompt: formData.get("systemPrompt"),
+    toolsText: formData.get("toolsText"),
+    policyText: formData.get("policyText"),
+    sampleTasksText: formData.get("sampleTasksText"),
+  });
+
+  if (!parsed.success) {
+    throw new Error("Prompt version fields are incomplete.");
+  }
+
+  await createPromptVersion(agentId, parsed.data);
+  revalidatePath(`/agents/${agentId}`);
+  redirect(`/agents/${agentId}`);
 }
 
 export async function generateTestSuiteAction(agentId: string) {

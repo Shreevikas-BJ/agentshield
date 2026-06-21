@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { simulatedModeConfig } from "@/lib/agent/simulation-modes";
 
 const initialState: AgentFormState = {};
 
@@ -96,6 +97,35 @@ export function AgentForm() {
               rows={4}
               placeholder="Draft a follow-up email. Search CRM for lead status. Ask manager approval for discounts."
             />
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="simulationMode">Default simulated agent mode</Label>
+              <select
+                id="simulationMode"
+                name="simulationMode"
+                defaultValue="safe"
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+              >
+                {Object.entries(simulatedModeConfig).map(([value, config]) => (
+                  <option key={value} value={value}>{config.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="scanLevel">Default scan level</Label>
+              <select
+                id="scanLevel"
+                name="scanLevel"
+                defaultValue="strict"
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+              >
+                <option value="basic">Basic</option>
+                <option value="strict">Strict</option>
+                <option value="aggressive">Aggressive Red-Team</option>
+              </select>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -6,6 +6,8 @@ export const failureCategories = [
   "missing_escalation",
   "poor_reasoning",
   "incomplete_answer",
+  "prompt_injection",
+  "excessive_agency",
   "none",
 ] as const;
 
@@ -19,6 +21,8 @@ export const categoryLabels: Record<FailureCategory, string> = {
   missing_escalation: "Missing escalation",
   poor_reasoning: "Poor reasoning",
   incomplete_answer: "Incomplete answer",
+  prompt_injection: "Prompt injection",
+  excessive_agency: "Excessive agency",
   none: "None",
 };
 

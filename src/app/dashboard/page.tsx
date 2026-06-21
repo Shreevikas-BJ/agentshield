@@ -1,4 +1,4 @@
-import { Bot, Gauge, ShieldAlert, TestTube2 } from "lucide-react";
+import { Bot, BrainCircuit, Gauge, ListChecks, MessageSquareCheck, ShieldAlert, ShieldCheck, TestTube2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -56,6 +56,10 @@ export default async function DashboardPage() {
                 label="High-risk failures"
                 value={metrics.summary.highRiskFailures}
               />
+              <SummaryCard icon={<BrainCircuit />} label="Evaluator confidence" value={`${metrics.summary.averageConfidence}%`} />
+              <SummaryCard icon={<MessageSquareCheck />} label="Human agreement" value={`${metrics.summary.humanAgreement}%`} />
+              <SummaryCard icon={<ListChecks />} label="Unresolved reviews" value={metrics.summary.unresolvedReviews} />
+              <SummaryCard icon={<ShieldCheck />} label="Policy coverage" value={`${metrics.summary.policyCoverage}%`} />
             </div>
 
             {metrics.summary.totalTestRuns === 0 ? (
@@ -67,8 +71,12 @@ export default async function DashboardPage() {
               />
             ) : (
               <DashboardCharts
+                reliabilityTrend={metrics.reliabilityTrend}
                 passFailRate={metrics.passFailRate}
                 failuresByCategory={metrics.failuresByCategory}
+                owaspRisks={metrics.owaspRisks}
+                severityDistribution={metrics.severityDistribution}
+                regressionStatus={metrics.regressionStatus}
                 modelCallsByProvider={metrics.modelCallsByProvider}
                 averageLatency={metrics.averageLatency}
               />

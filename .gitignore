@@ -14,6 +14,10 @@
 /coverage
 /work
 /outputs
+/test-results
+__pycache__/
+.pytest_cache/
+*.py[cod]
 
 # next.js
 /.next/

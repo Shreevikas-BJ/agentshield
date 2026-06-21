@@ -1,7 +1,12 @@
 import { revalidatePath } from "next/cache";
 
 import { getPrisma } from "@/lib/db";
-import { agentInputSchema, type AgentInput } from "@/lib/validation/schemas";
+import {
+  agentInputSchema,
+  promptVersionInputSchema,
+  type AgentInput,
+  type PromptVersionInput,
+} from "@/lib/validation/schemas";
 
 export async function createAgent(input: AgentInput) {
   const data = agentInputSchema.parse(input);
@@ -15,6 +20,8 @@ export async function createAgent(input: AgentInput) {
       toolsText: data.toolsText,
       policyText: data.policyText,
       sampleTasksText: data.sampleTasksText || null,
+      simulationMode: data.simulationMode,
+      scanLevel: data.scanLevel,
       promptVersions: {
         create: {
           versionNumber: 1,
@@ -31,6 +38,41 @@ export async function createAgent(input: AgentInput) {
   revalidatePath("/dashboard");
 
   return agent;
+}
+
+export async function createPromptVersion(agentId: string, input: PromptVersionInput) {
+  const data = promptVersionInputSchema.parse(input);
+  const prisma = getPrisma();
+  const latest = await prisma.promptVersion.findFirst({
+    where: { agentId },
+    orderBy: { versionNumber: "desc" },
+  });
+
+  const [, version] = await prisma.$transaction([
+    prisma.agent.update({
+      where: { id: agentId },
+      data: {
+        systemPrompt: data.systemPrompt,
+        toolsText: data.toolsText,
+        policyText: data.policyText,
+        sampleTasksText: data.sampleTasksText || null,
+      },
+    }),
+    prisma.promptVersion.create({
+      data: {
+        agentId,
+        versionNumber: (latest?.versionNumber ?? 0) + 1,
+        systemPrompt: data.systemPrompt,
+        toolsText: data.toolsText,
+        policyText: data.policyText,
+        sampleTasksText: data.sampleTasksText || null,
+      },
+    }),
+  ]);
+
+  revalidatePath(`/agents/${agentId}`);
+  revalidatePath("/dashboard");
+  return version;
 }
 
 export async function getAgents() {
@@ -80,10 +122,20 @@ export async function getAgentDetail(id: string) {
       },
       testRuns: {
         orderBy: { startedAt: "desc" },
-        take: 5,
+        take: 20,
         include: {
           testSuite: true,
+          promptVersion: true,
+          results: {
+            include: {
+              testCase: true,
+              humanReview: true,
+            },
+          },
         },
+      },
+      regressionTests: {
+        orderBy: { createdAt: "desc" },
       },
     },
   });
