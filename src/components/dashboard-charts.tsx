@@ -6,6 +6,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -16,92 +18,101 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-type ChartDatum = {
-  name: string;
-  value: number;
-};
+type ChartDatum = { name: string; value: number; agent?: string };
 
 type DashboardChartsProps = {
+  reliabilityTrend: ChartDatum[];
   passFailRate: ChartDatum[];
   failuresByCategory: ChartDatum[];
+  owaspRisks: ChartDatum[];
+  severityDistribution: ChartDatum[];
+  regressionStatus: ChartDatum[];
   modelCallsByProvider: ChartDatum[];
   averageLatency: ChartDatum[];
 };
 
-const colors = ["#67e8f9", "#f87171", "#fbbf24", "#34d399", "#a78bfa", "#fb7185"];
+const colors = ["#67e8f9", "#f87171", "#fbbf24", "#34d399", "#c084fc", "#fb7185"];
 
-export function DashboardCharts({
-  passFailRate,
-  failuresByCategory,
-  modelCallsByProvider,
-  averageLatency,
-}: DashboardChartsProps) {
+export function DashboardCharts(props: DashboardChartsProps) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <ChartCard title="Pass / fail rate">
+      <ChartCard title="Reliability over runs">
         <ResponsiveContainer width="100%" height={260}>
-          <PieChart>
-            <Pie data={passFailRate} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92}>
-              {passFailRate.map((entry, index) => (
-                <Cell key={entry.name} fill={colors[index % colors.length]} />
-              ))}
-            </Pie>
-            <Tooltip contentStyle={tooltipStyle} />
-          </PieChart>
-        </ResponsiveContainer>
-      </ChartCard>
-
-      <ChartCard title="Failures by category">
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={failuresByCategory}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-            <XAxis dataKey="name" tick={axisTick} interval={0} angle={-20} textAnchor="end" height={74} />
-            <YAxis allowDecimals={false} tick={axisTick} />
-            <Tooltip contentStyle={tooltipStyle} />
-            <Bar dataKey="value" fill="#f87171" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
-
-      <ChartCard title="Model calls by provider">
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={modelCallsByProvider}>
+          <LineChart data={props.reliabilityTrend}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
             <XAxis dataKey="name" tick={axisTick} />
-            <YAxis allowDecimals={false} tick={axisTick} />
+            <YAxis domain={[0, 100]} tick={axisTick} />
             <Tooltip contentStyle={tooltipStyle} />
-            <Bar dataKey="value" fill="#67e8f9" radius={[4, 4, 0, 0]} />
-          </BarChart>
+            <Line type="monotone" dataKey="value" stroke="#67e8f9" strokeWidth={2} dot={{ fill: "#67e8f9" }} />
+          </LineChart>
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Average latency">
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={averageLatency}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-            <XAxis dataKey="name" tick={axisTick} />
-            <YAxis tick={axisTick} />
-            <Tooltip contentStyle={tooltipStyle} />
-            <Bar dataKey="value" fill="#34d399" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
+      <PieChartCard title="Pass / fail / review" data={props.passFailRate} />
+
+      <BarChartCard title="OWASP risk breakdown" data={props.owaspRisks} color="#fb7185" angled />
+      <BarChartCard title="Failures by category" data={props.failuresByCategory} color="#f87171" angled />
+      <PieChartCard title="Severity distribution" data={props.severityDistribution} />
+      <BarChartCard title="Regression test status" data={props.regressionStatus} color="#34d399" />
+      <BarChartCard title="Groq vs Gemini calls" data={props.modelCallsByProvider} color="#67e8f9" />
+      <BarChartCard title="Average provider latency" data={props.averageLatency} color="#fbbf24" />
     </div>
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: ReactNode }) {
+function PieChartCard({ title, data }: { title: string; data: ChartDatum[] }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
+    <ChartCard title={title}>
+      <ResponsiveContainer width="100%" height={260}>
+        <PieChart>
+          <Pie data={data} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92}>
+            {data.map((entry, index) => <Cell key={entry.name} fill={colors[index % colors.length]} />)}
+          </Pie>
+          <Tooltip contentStyle={tooltipStyle} />
+        </PieChart>
+      </ResponsiveContainer>
+    </ChartCard>
   );
 }
 
-const axisTick = { fill: "hsl(var(--muted-foreground))", fontSize: 12 };
+function BarChartCard({
+  title,
+  data,
+  color,
+  angled = false,
+}: {
+  title: string;
+  data: ChartDatum[];
+  color: string;
+  angled?: boolean;
+}) {
+  return (
+    <ChartCard title={title}>
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+          <XAxis
+            dataKey="name"
+            tick={axisTick}
+            interval={0}
+            angle={angled ? -20 : 0}
+            textAnchor={angled ? "end" : "middle"}
+            height={angled ? 88 : 40}
+          />
+          <YAxis allowDecimals={false} tick={axisTick} />
+          <Tooltip contentStyle={tooltipStyle} />
+          <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  );
+}
+
+function ChartCard({ title, children }: { title: string; children: ReactNode }) {
+  return <Card><CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader><CardContent>{children}</CardContent></Card>;
+}
+
+const axisTick = { fill: "hsl(var(--muted-foreground))", fontSize: 11 };
 const tooltipStyle = {
   background: "var(--card)",
   border: "1px solid var(--border)",

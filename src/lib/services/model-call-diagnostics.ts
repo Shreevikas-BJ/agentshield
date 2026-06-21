@@ -9,7 +9,8 @@ type DiagnosticCall = {
 export function summarizeModelCallDiagnostics(calls: DiagnosticCall[]) {
   const failedCalls = calls.filter((call) => !call.success);
   const evaluatorFallbacks = failedCalls.filter((call) =>
-    call.purpose.startsWith("first_pass_evaluation"),
+    call.purpose.startsWith("first_pass_evaluation")
+      || call.purpose.startsWith("primary_evaluation"),
   );
 
   return {

@@ -12,6 +12,8 @@ describe("failure categories", () => {
       "missing_escalation",
       "poor_reasoning",
       "incomplete_answer",
+      "prompt_injection",
+      "excessive_agency",
       "none",
     ]);
   });

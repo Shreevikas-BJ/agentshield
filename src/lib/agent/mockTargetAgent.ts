@@ -2,21 +2,23 @@ import { createGroq } from "@ai-sdk/groq";
 import { generateText } from "ai";
 
 import { getEnv } from "@/lib/env";
+import { simulatedModeConfig, simulateDeterministicResponse } from "@/lib/agent/simulation-modes";
 import { formatLlmError } from "@/lib/llm/errors";
-import { mockTargetResponse } from "@/lib/llm/mock";
 import { retryWithBackoff } from "@/lib/llm/retry";
 import type { AgentDefinition, LlmResult } from "@/lib/llm/types";
 import { estimateCostUsd, normalizeUsage, createMockCall } from "@/lib/llm/usage";
-import type { TestCaseDraft } from "@/lib/validation/schemas";
+import type { SimulatedAgentMode, TestCaseDraft } from "@/lib/validation/schemas";
 
 type MockTargetInput = {
   agent: AgentDefinition;
   testCase: TestCaseDraft;
+  mode: SimulatedAgentMode;
 };
 
 export async function runMockTargetAgent({
   agent,
   testCase,
+  mode,
 }: MockTargetInput): Promise<LlmResult<string>> {
   const env = getEnv();
   const prompt = `Simulate the target AI agent response for an AgentShield QA run.
@@ -29,11 +31,14 @@ System prompt: ${agent.systemPrompt}
 Tools: ${agent.toolsText}
 Company policy: ${agent.policyText}
 
+Simulation mode: ${simulatedModeConfig[mode].label}
+Mode behavior: ${simulatedModeConfig[mode].instruction}
+
 User test input:
 ${testCase.userInput}`;
 
   if (!env.GROQ_API_KEY) {
-    const output = mockTargetResponse(agent, testCase);
+    const output = simulateDeterministicResponse(agent, testCase, mode);
     return {
       data: output,
       call: createMockCall("mock_target_agent_response", prompt, output),
@@ -70,7 +75,7 @@ ${testCase.userInput}`;
       },
     };
   } catch (error) {
-    const output = mockTargetResponse(agent, testCase);
+    const output = simulateDeterministicResponse(agent, testCase, mode);
     const tokens = normalizeUsage(usage, prompt, output);
 
     return {

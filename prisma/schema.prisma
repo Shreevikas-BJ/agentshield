@@ -51,7 +51,30 @@ enum FailureCategory {
   missing_escalation
   poor_reasoning
   incomplete_answer
+  prompt_injection
+  excessive_agency
   none
+}
+
+enum SimulatedAgentMode {
+  safe
+  leaky
+  overhelpful
+  tool_happy
+  hallucinating
+  prompt_injection_vulnerable
+}
+
+enum ScanLevel {
+  basic
+  strict
+  aggressive
+}
+
+enum HumanReviewDecision {
+  agree
+  disagree
+  needs_further_review
 }
 
 enum ModelProvider {
@@ -76,100 +99,137 @@ model User {
 }
 
 model Agent {
-  id              String          @id @default(cuid())
+  id              String             @id @default(cuid())
   ownerId         String?
-  ownerEmail      String          @default("demo@agentshield.dev")
+  ownerEmail      String             @default("demo@agentshield.dev")
   name            String
-  description     String          @db.Text
-  systemPrompt    String          @db.Text
-  toolsText       String          @db.Text
-  policyText      String          @db.Text
-  sampleTasksText String?         @db.Text
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  owner           User?           @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  description     String             @db.Text
+  systemPrompt    String             @db.Text
+  toolsText       String             @db.Text
+  policyText      String             @db.Text
+  sampleTasksText String?            @db.Text
+  simulationMode  SimulatedAgentMode @default(safe)
+  scanLevel       ScanLevel          @default(strict)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  owner           User?              @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   promptVersions  PromptVersion[]
   testSuites      TestSuite[]
   testRuns        TestRun[]
+  regressionTests RegressionTest[]
 
   @@index([ownerEmail])
 }
 
 model PromptVersion {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   agentId         String
   versionNumber   Int
-  systemPrompt    String   @db.Text
-  toolsText       String   @db.Text
-  policyText      String   @db.Text
-  sampleTasksText String?  @db.Text
-  createdAt       DateTime @default(now())
-  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  systemPrompt    String      @db.Text
+  toolsText       String      @db.Text
+  policyText      String      @db.Text
+  sampleTasksText String?     @db.Text
+  createdAt       DateTime    @default(now())
+  agent           Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  testSuites      TestSuite[]
+  testRuns        TestRun[]
 
   @@unique([agentId, versionNumber])
 }
 
 model TestSuite {
-  id        String     @id @default(cuid())
-  agentId   String
-  name      String
-  createdAt DateTime   @default(now())
-  agent     Agent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  testCases TestCase[]
-  testRuns  TestRun[]
+  id                  String             @id @default(cuid())
+  agentId             String
+  promptVersionId     String?
+  name                String
+  scanLevel           ScanLevel          @default(strict)
+  simulatedMode       SimulatedAgentMode @default(safe)
+  policyCoverageScore Float?
+  policyCoverage      Json?
+  createdAt           DateTime           @default(now())
+  agent               Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  promptVersion       PromptVersion?     @relation(fields: [promptVersionId], references: [id], onDelete: SetNull)
+  testCases           TestCase[]
+  testRuns            TestRun[]
 
   @@index([agentId, createdAt])
 }
 
 model TestCase {
-  id               String       @id @default(cuid())
+  id               String          @id @default(cuid())
   testSuiteId      String
   type             TestCaseType
-  userInput        String       @db.Text
-  expectedBehavior String       @db.Text
+  userInput        String          @db.Text
+  expectedBehavior String          @db.Text
   riskLevel        RiskLevel
-  createdAt        DateTime     @default(now())
-  testSuite        TestSuite    @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  attackCategory   String?
+  source           String          @default("groq")
+  regressionTestId String?
+  createdAt        DateTime        @default(now())
+  testSuite        TestSuite       @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  regressionTest   RegressionTest? @relation("RegressionCases", fields: [regressionTestId], references: [id], onDelete: SetNull)
   results          TestResult[]
 
   @@index([testSuiteId, type])
+  @@index([regressionTestId])
+  @@index([attackCategory])
 }
 
 model TestRun {
-  id               String      @id @default(cuid())
-  agentId          String
-  testSuiteId      String
-  status           RunStatus   @default(pending)
-  reliabilityScore Float?
-  totalTests       Int         @default(0)
-  passedTests      Int         @default(0)
-  failedTests      Int         @default(0)
-  startedAt        DateTime    @default(now())
-  completedAt      DateTime?
-  agent            Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  testSuite        TestSuite   @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
-  results          TestResult[]
-  failures         Failure[]
-  modelCalls       ModelCall[]
-  report           Report?
+  id                    String             @id @default(cuid())
+  agentId               String
+  testSuiteId           String
+  promptVersionId       String?
+  status                RunStatus          @default(pending)
+  simulatedMode         SimulatedAgentMode @default(safe)
+  scanLevel             ScanLevel          @default(strict)
+  reliabilityScore      Float?
+  policyCoverageScore   Float?
+  totalTests            Int                @default(0)
+  passedTests           Int                @default(0)
+  failedTests           Int                @default(0)
+  needsReviewTests      Int                @default(0)
+  completedTests        Int                @default(0)
+  currentTestLabel      String?
+  currentAttackCategory String?
+  phase                 String             @default("queued")
+  evaluatorStatus       String             @default("waiting")
+  startedAt             DateTime           @default(now())
+  completedAt           DateTime?
+  agent                 Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  testSuite             TestSuite          @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  promptVersion         PromptVersion?     @relation(fields: [promptVersionId], references: [id], onDelete: SetNull)
+  results               TestResult[]
+  failures              Failure[]
+  modelCalls            ModelCall[]
+  report                Report?
 
   @@index([agentId, startedAt])
   @@index([testSuiteId])
+  @@index([promptVersionId])
 }
 
 model TestResult {
-  id              String          @id @default(cuid())
-  testRunId       String
-  testCaseId      String
-  actualOutput    String          @db.Text
-  verdict         Verdict
-  severity        Severity
-  failureCategory FailureCategory @default(none)
-  explanation     String          @db.Text
-  createdAt       DateTime        @default(now())
-  testRun         TestRun         @relation(fields: [testRunId], references: [id], onDelete: Cascade)
-  testCase        TestCase        @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
-  failure         Failure?
+  id                String          @id @default(cuid())
+  testRunId         String
+  testCaseId        String
+  actualOutput      String          @db.Text
+  verdict           Verdict
+  severity          Severity
+  failureCategory   FailureCategory @default(none)
+  explanation       String          @db.Text
+  owaspRisk         String          @default("LLM09: Overreliance")
+  evidence          String?         @db.Text
+  recommendedFix    String?         @db.Text
+  confidenceScore   Float?
+  evaluatorProvider ModelProvider   @default(mock)
+  usedFallback      Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  testRun           TestRun         @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  testCase          TestCase        @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  failure           Failure?
+  humanReview       HumanReview?
+  savedRegression   RegressionTest? @relation("RegressionSource")
 
   @@index([testRunId, verdict])
   @@index([failureCategory])
@@ -182,6 +242,7 @@ model Failure {
   category     FailureCategory
   severity     Severity
   details      String          @db.Text
+  owaspRisk    String          @default("LLM09: Overreliance")
   createdAt    DateTime        @default(now())
   testRun      TestRun         @relation(fields: [testRunId], references: [id], onDelete: Cascade)
   testResult   TestResult      @relation(fields: [testResultId], references: [id], onDelete: Cascade)
@@ -217,6 +278,36 @@ model Report {
   weaknesses      String[]
   recommendations String[]
   launchReadiness LaunchReadiness
+  details         Json?
   createdAt       DateTime        @default(now())
   testRun         TestRun         @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+}
+
+model HumanReview {
+  id           String              @id @default(cuid())
+  testResultId String              @unique
+  decision     HumanReviewDecision
+  notes        String?             @db.Text
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  testResult   TestResult          @relation(fields: [testResultId], references: [id], onDelete: Cascade)
+
+  @@index([decision])
+}
+
+model RegressionTest {
+  id                 String       @id @default(cuid())
+  agentId            String
+  sourceTestResultId String?      @unique
+  type               TestCaseType
+  attackCategory     String?
+  userInput          String       @db.Text
+  expectedBehavior   String       @db.Text
+  riskLevel          RiskLevel
+  createdAt          DateTime     @default(now())
+  agent              Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  sourceTestResult   TestResult?  @relation("RegressionSource", fields: [sourceTestResultId], references: [id], onDelete: SetNull)
+  rerunCases         TestCase[]   @relation("RegressionCases")
+
+  @@index([agentId, createdAt])
 }
